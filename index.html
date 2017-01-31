@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+
+    <title>Secure Remote Password Protocol</title>
+
+    <meta name="description" content="Discussing the interesting features of SRP">
+    <meta name="author" content="Joe Kirwin">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/league.css" id="theme">
+
+    <!-- Code syntax highlighting -->
+    <link rel="stylesheet" href="lib/css/zenburn.css">
+
+    <!-- Printing and PDF exports -->
+    <script>
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = window.location.search.match(/print-pdf/gi) ? 'css/print/pdf.css' : 'gcss/print/paper.css';
+        document.getElementsByTagName('head')[0].appendChild(link);
+    </script>
+
+    <!--[if lt IE 9]>
+    <script src="lib/js/html5shiv.js"></script>
+    <![endif]-->
+</head>
+
+<body>
+
+<div class="reveal">
+
+    <div class="slides">
+        <section >
+            <h2>Secure Remote Password Protocol (SRP)</h2>
+        </section>
+
+        <section>
+            <section>
+                <h3>What is SRP?</h3>
+                <p>A "strong" password authentication protocol created by <a href="http://www-cs-students.stanford.edu/~tjw/">Tom Wu</a>
+                to address a case where both sides only share a weak, human-readable passphrase</p>
+                <br><br>
+                <small><i>Heavy details of the technicals I'm about to get into below can be found <a href="http://srp.stanford.edu/ndss.html">here</a></i></small>
+            </section>
+            <section id="setup">
+                <h3>The Setup</h3>
+                <ol>
+                  <li>Client chooses $q$ and $N = 2q+1$ (both primes)</li>
+                  <li>Client chooses small random salt and computes:</li>
+                  <ul>
+                    <li>$x = Hash(salt,password)$</li>
+                    <li>$v = g^x$ <br>
+                        <small><i>Note that g is the cyclic group $\mathbb{Z}_n$, see <a href="#multiplicativeGroup">this slide</a> for more details.</i></small>
+                    </li>
+                  </ul>
+                  <li>The server then stores:</li>
+                  <ul>
+                    <li>$v$ (the verifier)</li>
+                    <li>$s$ (the salt)</li>
+                    <li>$i$ (the username to index this stuff)</li>
+                  </ul>
+                  <li>Discards:</li>
+                  <ul>
+                    <li>$x$ (the hash)</li>
+                  </ul>
+                </ol>
+            <aside class="notes">
+                v3, v6 and v6a have minor differences in session key format
+              One of the most simple descriptions of the protocol I found was from wikipedia.
+              Then I tried to condense and simplify that even more to this.
+              <br>
+              q is a Sophie Germaine prime, N is a safe prime, describe what that means to the audience.<br> x is more or less the plaintext password
+            </aside>
+            </section>
+            <section>
+                <h3>Subsequent authentications</h3>
+                <ol>
+                    <li>Client sends its username to the server</li>
+                    <li>Server looks up the verifier ($v$) and salt ($s$)</li>
+                    <li>Server sends the salt back to the Client</li>
+                    <li>Client computes $x=Hash(s,password)$</li>
+                    <li>Client generates a random number ($a$)</li>
+                    <li>Client sends $A = g^a$ to the server</li>
+                    <li>Server generates its own ephemeral key in the form $B = v + g^b$, where $b$ is a random number</li>
+                    <li>Server returns $B$ and another random number ($u$) called a random scrambling parameter</li>
+                </ol>
+            </section>
+            <section>
+                <p>
+                    Both sides now compute this a common value $S=g^{ab+bux}$
+                    <br><br>
+                    Server side derivation: $g^{ab+bux} = (g^{a+ux})^b = (g^a.g^{ux})^b = (A.(g^x)^u)^b = (A.v^u)^b$
+                    <br><br>
+                    Client side derivation: $g^{ab+bux} = (g^b)^{a+ux} = (B-v)^{a+ux} = (B-g^x)^{a+ux}$
+                    <br><br>
+                </p>
+                <aside class="notes">
+                    Product Rule x^{m+n}=x^m.x^n.
+                    Power Rule x^{mn}=(x^m)^n = (x^n)^m.
+                    Note there are other constants/randomness you can add in here to make it more difficult to attack.
+                    Also there are abort cases, for client and server, based on random values being zero, for example.
+                </aside>
+            </section>
+            <section>
+                <p>Using their respective computed $S$ from the previous slide</p>
+                <ul>
+                    <li>Client sends the server: <br> $message1 = Hash(A,B,S)$</li>
+                    <li>Server sends the client: <br> $message2 = Hash(A,message1,S)$</li>
+                </ul>
+                <aside class="notes">
+                    This is just to do password verification, you can add a computation into the mix that derives a strong session key too.
+                </aside>
+            </section>
+        </section>
+
+        <section>
+            <h3>What are its strengths?</h3>
+            <small><i>or what threats does it mitigate?</i></small>
+            <ul>
+                <li>Client side: you can keep your password in key-derivation function output form.</li>
+                <li>In transport the raw password is never used.</li>
+                <li>Server side: no actual passwords need to be stored, just the verifier and salt.</li>
+                <li>You can go further to derive a secure session key from the initial exchange.</li>
+            </ul>
+            <br> <br> <br>
+            <a href="#references"><small><i>see references page for more details</i></small></a>
+        </section>
+
+        <section id="references">
+            <h3>Cool follow up things to read if you're interested</h3>
+            <ul>
+               <li><a href="http://srp.stanford.edu/ndss.html">Tom Wu's Paper on SRP (full gore)</a> </li>
+               <li><a href="http://srp.stanford.edu/analysis.html">Stanford - Competitive Analysis of SRP</a></li>
+               <li><a href="http://tools.ietf.org/html/rfc5054">SRP Protocol for TLS Authentication [RFC]</a></li>
+               <li><a href="https://www.quora.com/Why-dont-more-web-frameworks-use-Secure-Remote-Password">Quora discussion about SRP mainstream usage</a><br>            <small><i>**cough** Some people's comments in there are really stupid</i></small></li>
+               <li><a href="https://clipperz.is/blog/2007/01/04/interview_tom_wu_inventor_srp_protocol/">Tom Wu's interview about SRP</a></li>
+               <li><a href="http://srp.stanford.edu/design.html">Stanford - SRP protocol design</a> </li>
+            </ul>
+        </section>
+
+        <section id="multiplicativeGroup">
+            <section>
+            <h3>Primitive Root Modulo N</h3>
+            <small><i>aka, what does this fracking mean?!</i></small>
+            <p>
+                In specific relation to the generator set $\mathbb{Z}_n$ <br><br>
+                coprime's of n are all the numbers ($k$), less than $n$ that satisfy $gcd(n, k) == 1$<br><br>
+                The primative root(s), are the select few of those that have the same periodicity as the set.<br><br>
+            </p>
+                <aside class="notes">
+                    gcd means Greatest Common Denominator.
+                    This set of coprimes is called "The congruent class" (like congruent triangles).
+                </aside>
+            </section>
+
+            <section>
+                <small><p>e.g. $\mathbb{Z}_{11}$ has coprimes of {1,2,3,4,5,6,7,8,9,10}</p></small>
+            <table>
+                <thead>
+                <tr>
+                <th align="left">x</th>
+                <th>$x^1$</th>
+                <th>$x^2$</th>
+                <th>$x^3$</th>
+                <th>$x^4$</th>
+                <th>$x^5$</th>
+                <th>$x^6$</th>
+                <th>$x^7$</th>
+                <th>$x^8$</th>
+                <th>$x^9$</th>
+                <th>$x^{10}$</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>2</td>
+                    <td>4</td>
+                    <td>8</td>
+                    <td>5</td>
+                    <td>10</td>
+                    <td>9</td>
+                    <td>7</td>
+                    <td>3</td>
+                    <td>6</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>3</td>
+                    <td>9</td>
+                    <td>5</td>
+                    <td>4</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>4</td>
+                    <td>5</td>
+                    <td>9</td>
+                    <td>3</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>5</td>
+                    <td>3</td>
+                    <td>4</td>
+                    <td>9</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>6</td>
+                    <td>6</td>
+                    <td>3</td>
+                    <td>7</td>
+                    <td>9</td>
+                    <td>10</td>
+                    <td>5</td>
+                    <td>8</td>
+                    <td>4</td>
+                    <td>2</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>7</td>
+                    <td>7</td>
+                    <td>5</td>
+                    <td>2</td>
+                    <td>3</td>
+                    <td>10</td>
+                    <td>4</td>
+                    <td>6</td>
+                    <td>9</td>
+                    <td>8</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>8</td>
+                    <td>8</td>
+                    <td>9</td>
+                    <td>6</td>
+                    <td>4</td>
+                    <td>10</td>
+                    <td>3</td>
+                    <td>2</td>
+                    <td>5</td>
+                    <td>7</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>9</td>
+                    <td>9</td>
+                    <td>4</td>
+                    <td>3</td>
+                    <td>5</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>10</td>
+                    <td>10</td>
+                    <td>1</td>
+                </tr>
+                </tbody>
+            </table>
+            </section>
+            <section>
+                <p>So we can see that {2,6,7,8} are the primitive roots of $\mathbb{Z}_{11}$
+                <br><br>
+                    This is important from the crypto side to ensure the inversion is as difficult as possible.<br><br>
+                    Here's the thing an attacker would need to solve:<br>
+                    $ g^x \bmod 11 = result $
+                    <br><i>where $x$ is the hashed password</i><br><br>
+                    The fact that $N$ is prime is also of relevance as it ensures that the size of the congruent class is $N-1$.<br>
+                    If it wasn't prime the congruent class could be small, and in some cases no primative roots would exist, e.g. N=15
+                </p>
+                <a href="#setup">back to SRP Setup page</a>
+            </section>
+        </section>
+    </div>
+</div>
+
+<script src="lib/js/head.min.js"></script>
+<script src="js/reveal.js"></script>
+
+<script>
+
+    // Full list of configuration options available at:
+    // https://github.com/hakimel/reveal.js#configuration
+    Reveal.initialize({
+        controls: true,
+        progress: true,
+        history: true,
+        center: true,
+        showNotes: false,
+
+        transition: 'slide', // none/fade/slide/convex/concave/zoom
+        transitionSpeed: 'fast', // default/fast/slow
+
+        // Optional reveal.js plugins
+        math: {
+            mathjax: 'https://cdn.mathjax.org/mathjax/latest/MathJax.js',
+            config: 'TeX-AMS_HTML-full'  // See http://docs.mathjax.org/en/latest/config-files.html
+        },
+
+        dependencies: [
+            {
+                src: 'lib/js/classList.js', condition: function () {
+                return !document.body.classList;
+            }
+            },
+            {
+                src: 'plugin/markdown/marked.js', condition: function () {
+                return !!document.querySelector('[data-markdown]');
+            }
+            },
+            {
+                src: 'plugin/markdown/markdown.js', condition: function () {
+                return !!document.querySelector('[data-markdown]');
+            }
+            },
+            {
+                src: 'plugin/highlight/highlight.js', async: true, callback: function () {
+                hljs.initHighlightingOnLoad();
+            }},
+            {src: 'plugin/math/math.js', async: true },
+            {src: 'plugin/zoom-js/zoom.js', async: true},
+            {src: 'plugin/notes/notes.js', async: true}
+        ]
+    });
+
+</script>
+
+</body>
+</html>
